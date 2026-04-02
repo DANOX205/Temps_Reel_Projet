@@ -69,8 +69,10 @@ typedef struct {
 
 void check_battery(){
   char buffer[256];
+  pthread_mutex_lock(&mutex);
   send (fd,"B\n", strlen("B\n"),0);
   int n = recv(fd, buffer, 256, 0);
+  pthread_mutex_unlock(&mutex);
   printf("Battery level : %d\n",n);
 }
 
@@ -82,9 +84,10 @@ void drive_robot(){
   double left_sensor, right_sensor;
   char buffer[256];
   int angle = 0;
-
+  pthread_mutex_lock(&mutex);
   send (fd,"S\n", strlen("S\n"),0);
   int n = recv(fd,buffer, 256, 0);
+  pthread_mutex_unlock(&mutex);
   buffer[n]= '\0';
   printf("Buffer : %s\n", buffer);
   sscanf(buffer,"S,%lf,%lf", &left_sensor,&right_sensor);
@@ -100,12 +103,15 @@ void drive_robot(){
 	char str[7];
 	sprintf(str, "T,%f\n", random);
 	printf("Valeur de str : %s",str);
+	pthread_mutex_lock(&mutex);
 	send(fd,str,strlen("T,3.14\n"),0);
 	n = recv(fd,buffer,256,0);
-
+	pthread_mutex_unlock(&mutex);
   } else {
 	printf("JE DOIS AVANCER ! \n");
+	pthread_mutex_lock(&mutex);
     send(fd,"M,50,50\n",strlen("M,50,50\n"),0);
+	pthread_mutex_unlock(&mutex);
   }
 }
 
@@ -125,13 +131,9 @@ void *task_function(void *arg){
     clock_gettime(CLOCK_MONOTONIC, &start);
     // ==== SECTION CRITIQUE 
     if (param->id == 1) { // On est dans la première tâche (Drive Robot from wall to wall)
-      pthread_mutex_lock(&mutex);
       drive_robot();
-      pthread_mutex_unlock(&mutex);
     } else if (param->id == 2){ // On est dans la deuxième tâche (Display on console the batter level)
-      pthread_mutex_lock(&mutex);
       check_battery();
-      pthread_mutex_unlock(&mutex);
     }
     
     clock_gettime(CLOCK_MONOTONIC,&end);
