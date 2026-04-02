@@ -74,18 +74,37 @@ void check_battery(){
   printf("Battery level : %d\n",n);
 }
 
+void drive_towards_battery_station(){
+	// Pour plus tard
+}
+
 void drive_robot(){
   double left_sensor, right_sensor;
   char buffer[256];
+  int angle = 0;
+
   send (fd,"S\n", strlen("S\n"),0);
   int n = recv(fd,buffer, 256, 0);
   buffer[n]= '\0';
-  printf("%s\n", buffer);
+  printf("Buffer : %s\n", buffer);
   sscanf(buffer,"S,%lf,%lf", &left_sensor,&right_sensor);
-  if ((left_sensor < 20)||(right_sensor < 20)){
-    send(fd,"T,3.14\n", strlen("T,3.14\n"),0);
-    //int n = recv(fd,buffer,256,0);
+  //printf("Distance sensor 0 value: %.3f\n", left_sensor);
+  //printf("Distance sensor 1 value: %.3f\n", right_sensor);
+  if ((left_sensor > 20)||(right_sensor > 20)){
+	float random = ((float)rand() / (float) (RAND_MAX)) * 3.14;
+	int sign = rand() % (2);
+	printf("Valeur de sign : %d \n", sign);
+	if (sign){
+		random = -random;	
+	}
+	char str[7];
+	sprintf(str, "T,%f\n", random);
+	printf("Valeur de str : %s",str);
+	send(fd,str,strlen("T,3.14\n"),0);
+	n = recv(fd,buffer,256,0);
+
   } else {
+	printf("JE DOIS AVANCER ! \n");
     send(fd,"M,50,50\n",strlen("M,50,50\n"),0);
   }
 }
@@ -165,7 +184,7 @@ int main(int argc, char **argv) {
   fflush(stdout);
 
   pthread_t t1, t2;
-  task_param_t p1 = {1,1000000000L}; // 1s
+  task_param_t p1 = {1,250000000L}; // 0.25s
   task_param_t p2 = {2,2000000000L}; // 2s
   
   pthread_attr_t attr1, attr2;
