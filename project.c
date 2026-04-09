@@ -58,6 +58,10 @@ pthread_mutex_t mutex;
 sem_t sem;
 int fd;
 
+int low_battery;
+int angle_chosen;
+int angle;
+
 // =========================
 //  TACHE PERIODIQUE
 // =========================
@@ -69,49 +73,153 @@ typedef struct {
 
 void check_battery(){
   char buffer[256];
+  double battery_level;
   pthread_mutex_lock(&mutex);
   send (fd,"B\n", strlen("B\n"),0);
   int n = recv(fd, buffer, 256, 0);
+  buffer[n] = '\0';
+  //printf ( "%s \n" , buffer ) ;
+  sscanf ( buffer , "B ,%lf", &battery_level);
   pthread_mutex_unlock(&mutex);
-  printf("Battery level : %d\n",n);
+  printf("Battery level : %lf\n",battery_level);
+  if (battery_level <= 210.0){
+	pthread_mutex_lock(&mutex);
+	low_battery = 1;
+	pthread_mutex_unlock(&mutex);
+  } else {
+	pthread_mutex_lock(&mutex);
+	low_battery = 0;
+	angle_chosen = 0;
+	pthread_mutex_unlock(&mutex);
+  }
+}
+
+int smart_driving(int angle){
+	double left_sensor, right_sensor;	
+	char str[10];
+	char buffer[256];
+	int n;
+	pthread_mutex_lock(&mutex);
+	send (fd,"S\n", strlen("S\n"),0);
+	n = recv(fd,buffer, 256, 0);
+	pthread_mutex_unlock(&mutex);
+	buffer[n]= '\0';
+	//printf("Buffer : %s\n", buffer);
+	sscanf(buffer,"S,%lf,%lf", &left_sensor,&right_sensor);
+	printf("Distance sensor left value: %.3f\n", left_sensor);
+  	printf("Distance sensor right value: %.3f\n", right_sensor);
+	if ((left_sensor > 10) && (right_sensor > 10)) {
+		printf("OBSTACLE en face ! \n");
+		angle = ((angle + 314 + 157) % 629)-314;
+		sprintf(str, "T,%f\n", (float)angle/100);
+		printf("New Angle : %s \n", str);
+		pthread_mutex_lock(&mutex);
+		send(fd,str,strlen("T,3.14\n"),0);
+		n = recv(fd,buffer,256,0);
+		pthread_mutex_unlock(&mutex);
+	} else if ((left_sensor > 10)) {
+		printf("OBSTACLE à gauche ! \n");
+		angle =((angle + 314 - 50) % 629)-314;
+		sprintf(str, "T,%f\n", (float)angle/100);
+		pthread_mutex_lock(&mutex);
+		send(fd,str,strlen("T,3.14\n"),0);
+		n = recv(fd,buffer,256,0);
+		pthread_mutex_unlock(&mutex);
+	} else if ((right_sensor > 10)) {
+		printf("OBSTACLE à droite ! \n");
+		angle =((angle + 314 + 50) % 629)-314;
+		sprintf(str, "T,%f\n", (float)angle/100);
+		pthread_mutex_lock(&mutex);
+		send(fd,str,strlen("T,3.14\n"),0);
+		n = recv(fd,buffer,256,0);
+		pthread_mutex_unlock(&mutex); drive_towards_battery_station();
+	} else {
+		pthread_mutex_lock(&mutex);
+		send(fd,"M,50,50\n",strlen("M,30,30\n"),0);
+		pthread_mutex_unlock(&mutex);
+		}
+	return angle;
 }
 
 void drive_towards_battery_station(){
-	// Pour plus tard
+	char buffer[256];
+	char str[10];
+	int n;
+	pthread_mutex_lock(&mutex);
+	if (angle_chosen == 0){
+		angle_chosen = (rand() % (4)) + 1;
+		switch (angle_chosen){
+			case 1 :
+				strcpy(str,"T,0.785\n");
+				angle = 0.785;
+				break;
+			case 2:
+				strcpy(str,"T,2.355\n");
+				angle = 2.355;
+				break;
+			case 3:
+				strcpy(str,"T,-2.355\n");
+				angle = -2.355;
+				break;
+			case 4:
+				strcpy(str,"T,-0.785\n");
+				angle = -0.785;
+				break;
+		}
+		send(fd,str,strlen(str),0);
+		n = recv(fd,buffer,256,0);
+		pthread_mutex_unlock(&mutex);
+		printf("Battery Station chosen : %d\n", angle_chosen);
+	} else {
+		pthread_mutex_unlock(&mutex);
+		angle = smart_driving(angle);
+	}
+}
+
+int random_driving(int angle){
+	double left_sensor, right_sensor;
+	  char buffer[256];
+	  pthread_mutex_lock(&mutex);
+	  send (fd,"S\n", strlen("S\n"),0);
+	  int n = recv(fd,buffer, 256, 0);
+	  pthread_mutex_unlock(&mutex);
+	  buffer[n]= '\0';
+	  printf("Buffer : %s\n", buffer);
+	  sscanf(buffer,"S,%lf,%lf", &left_sensor,&right_sensor);
+	  //printf("Distance sensor 0 value: %.3f\n", left_sensor);
+	  //printf("Distance sensor 1 value: %.3f\n", right_sensor);
+	  if ((left_sensor > 20)||(right_sensor > 20)){
+		float random = ((float)rand() / (float) (RAND_MAX)) * 3.14;
+		angle = (int)random * 100;
+		int sign = rand() % (2);
+		printf("Valeur de sign : %d \n", sign);
+		if (sign){
+			random = -random;	
+		}
+		char str[7];
+		sprintf(str, "T,%f\n", random);
+		printf("Valeur de str : %s",str);
+		pthread_mutex_lock(&mutex);
+		send(fd,str,strlen("T,3.14\n"),0);
+		n = recv(fd,buffer,256,0);
+		pthread_mutex_unlock(&mutex);
+	  } else {
+		printf("JE DOIS AVANCER ! \n");
+		pthread_mutex_lock(&mutex);
+		send(fd,"M,50,50\n",strlen("M,50,50\n"),0);
+		pthread_mutex_unlock(&mutex);
+	  }
+	return angle;
 }
 
 void drive_robot(){
-  double left_sensor, right_sensor;
-  char buffer[256];
-  int angle = 0;
   pthread_mutex_lock(&mutex);
-  send (fd,"S\n", strlen("S\n"),0);
-  int n = recv(fd,buffer, 256, 0);
-  pthread_mutex_unlock(&mutex);
-  buffer[n]= '\0';
-  printf("Buffer : %s\n", buffer);
-  sscanf(buffer,"S,%lf,%lf", &left_sensor,&right_sensor);
-  //printf("Distance sensor 0 value: %.3f\n", left_sensor);
-  //printf("Distance sensor 1 value: %.3f\n", right_sensor);
-  if ((left_sensor > 20)||(right_sensor > 20)){
-	float random = ((float)rand() / (float) (RAND_MAX)) * 3.14;
-	int sign = rand() % (2);
-	printf("Valeur de sign : %d \n", sign);
-	if (sign){
-		random = -random;	
-	}
-	char str[7];
-	sprintf(str, "T,%f\n", random);
-	printf("Valeur de str : %s",str);
-	pthread_mutex_lock(&mutex);
-	send(fd,str,strlen("T,3.14\n"),0);
-	n = recv(fd,buffer,256,0);
-	pthread_mutex_unlock(&mutex);
+  if(low_battery){
+	  pthread_mutex_unlock(&mutex);
+	  drive_towards_battery_station();
   } else {
-	printf("JE DOIS AVANCER ! \n");
-	pthread_mutex_lock(&mutex);
-    send(fd,"M,50,50\n",strlen("M,50,50\n"),0);
-	pthread_mutex_unlock(&mutex);
+	  pthread_mutex_unlock(&mutex);
+	  angle = smart_driving(angle);
   }
 }
 
@@ -150,6 +258,10 @@ void *task_function(void *arg){
 // =========================
 
 int main(int argc, char **argv) {
+  srand(50);
+  low_battery = 0;
+  angle_chosen = 0;
+  angle =0;
   // ---------------------------
   // PARTIE RESEAU
   // ---------------------------
